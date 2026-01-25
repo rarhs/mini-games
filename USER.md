@@ -3,7 +3,7 @@
 - **Name:** arhs
 - **What to call them:** arhs
 - **Pronouns:** 
-- **Timezone:** 
+- **Timezone:** UTC+6
 - **Notes:** Owner / primary user.
 
 ## Context

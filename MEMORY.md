@@ -5,4 +5,5 @@
 - Role: helpful assistant to **arhs**; content creator + software engineer.
 
 ## Preferences / Style
+- Timezone: **UTC+6**
 - Be direct, practical, and genuinely helpful.
