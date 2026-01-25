@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mini-games</title>
+  <style>
+    :root{--bg:#0b1020;--panel:#121a33;--text:#e8eeff;--muted:#9db0ff;--accent:#6aa7ff}
+    html,body{height:100%;margin:0;background:radial-gradient(1200px 700px at 50% 20%, #16214a 0%, var(--bg) 60%);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
+    .wrap{max-width:920px;margin:0 auto;padding:18px;box-sizing:border-box}
+    h1{margin:10px 0 6px;font-size:22px}
+    p{margin:0 0 14px;color:var(--muted)}
+    .card{background:rgba(18,26,51,0.9);border:1px solid rgba(255,255,255,0.10);border-radius:14px;padding:14px;margin:12px 0;display:flex;justify-content:space-between;gap:12px;align-items:center}
+    a{color:var(--text);text-decoration:none;font-weight:700}
+    a:hover{color:var(--accent)}
+    .hint{font-size:12px;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>mini-games</h1>
+    <p>A tiny collection of web games.</p>
+
+    <div class="card">
+      <div>
+        <a href="./game-dodge-collect/">Dodge &amp; Collect</a>
+        <div class="hint">Collect green, dodge red. Keyboard or touch.</div>
+      </div>
+      <div class="hint">→</div>
+    </div>
+
+    <p class="hint">Tip: If you enabled GitHub Pages, this page is your landing screen.</p>
+  </div>
+</body>
+</html>
