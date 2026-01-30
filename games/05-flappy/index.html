@@ -71,7 +71,11 @@
     if(k===' '||k==='arrowup') {e.preventDefault(); flap();}
     if(k==='r') reset();
   },{passive:false});
+  // Input: PointerEvents are great, but some mobile browsers (older iOS Safari)
+  // can be flaky. Add click/touch fallbacks.
   c.addEventListener('pointerdown', flap);
+  c.addEventListener('click', flap);
+  c.addEventListener('touchstart', (e)=>{ e.preventDefault(); flap(); }, {passive:false});
   btn.onclick=reset;
 
   function setBest(){
