@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>Whack-a-Mole</title>
+  <link rel="stylesheet" href="../_shared.css"/>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title"><b>Whack‑a‑Mole</b><span>Tap the green mole. Misses cost you.</span></div>
+    <div class="hud">
+      <div class="chip"><small>Score</small><b id="score">0</b></div>
+      <div class="chip"><small>Time</small><b id="time">30</b></div>
+      <button id="btnStart">Start</button>
+      <button id="btnRestart">Reset</button>
+      <a class="chip" href="../.."><small>Back</small><b>Home</b></a>
+    </div>
+  </header>
+  <canvas id="c" width="900" height="560"></canvas>
+  <footer>
+    <div>Tap fast. 30 seconds.</div>
+    <div>Tip: aim center, don’t spam.</div>
+  </footer>
+</div>
+<script>
+(() => {
+  const c=document.getElementById('c');
+  const ctx=c.getContext('2d');
+  const elScore=document.getElementById('score');
+  const elTime=document.getElementById('time');
+  const btnStart=document.getElementById('btnStart');
+  const btnReset=document.getElementById('btnRestart');
+
+  function fit(){
+    const r=c.getBoundingClientRect();
+    const dpr=Math.min(2, devicePixelRatio||1);
+    const w=Math.max(360, Math.floor(r.width*dpr));
+    const h=Math.max(320, Math.floor((window.innerHeight*0.72)*dpr));
+    if(c.width!==w||c.height!==h){c.width=w;c.height=h;}
+  }
+  new ResizeObserver(fit).observe(c); fit();
+
+  const holes=[];
+  const grid=3;
+  let active=-1;
+  let score=0;
+  let timeLeft=30;
+  let running=false;
+  let nextPop=0;
+
+  function layout(){
+    holes.length=0;
+    const pad=c.width*0.08;
+    const gap=c.width*0.06;
+    const size=(c.width - pad*2 - gap*(grid-1))/grid;
+    const top=c.height*0.18;
+    for(let r=0;r<grid;r++) for(let col=0;col<grid;col++){
+      holes.push({
+        x: pad+col*(size+gap)+size/2,
+        y: top+r*(size*0.9+gap)+size/2,
+        r: size*0.26,
+      });
+    }
+  }
+
+  function reset(){
+    score=0; timeLeft=30; running=false; active=-1; nextPop=0;
+    elScore.textContent='0'; elTime.textContent='30';
+  }
+
+  function start(){
+    if(running) return;
+    running=true;
+    active=-1;
+    nextPop=0;
+  }
+
+  btnStart.onclick=start;
+  btnReset.onclick=()=>{reset();};
+
+  function pickNew(){
+    let n;
+    do { n=(Math.random()*holes.length)|0; } while(n===active);
+    active=n;
+  }
+
+  function hitTest(x,y){
+    if(active<0) return false;
+    const h=holes[active];
+    const dx=x-h.x, dy=y-h.y;
+    return dx*dx+dy*dy <= h.r*h.r;
+  }
+
+  c.addEventListener('pointerdown',(e)=>{
+    const r=c.getBoundingClientRect();
+    const dpr=c.width/r.width;
+    const x=(e.clientX-r.left)*dpr;
+    const y=(e.clientY-r.top)*dpr;
+    if(!running){ start(); return; }
+    if(hitTest(x,y)){
+      score+=1; elScore.textContent=String(score);
+      active=-1;
+      nextPop=0;
+    } else {
+      score=Math.max(0, score-1); elScore.textContent=String(score);
+    }
+  });
+
+  let last=performance.now();
+  function loop(now){
+    const dt=(now-last)/1000; last=now;
+
+    layout();
+
+    if(running){
+      timeLeft=Math.max(0, timeLeft-dt);
+      elTime.textContent=String(Math.ceil(timeLeft));
+      nextPop-=dt;
+      if(nextPop<=0){
+        pickNew();
+        // time between pops scales with remaining time
+        nextPop = 0.55 + Math.random()*0.45;
+      }
+      if(timeLeft<=0){ running=false; active=-1; }
+    }
+
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,c.width,c.height);
+
+    // holes
+    for(let i=0;i<holes.length;i++){
+      const h=holes[i];
+      ctx.fillStyle='rgba(255,255,255,0.06)';
+      ctx.beginPath();
+      ctx.ellipse(h.x,h.y+h.r*0.65,h.r*1.35,h.r*0.75,0,0,Math.PI*2);
+      ctx.fill();
+
+      // mole
+      if(i===active){
+        ctx.fillStyle='rgba(50,232,117,0.20)';
+        ctx.beginPath(); ctx.arc(h.x,h.y,h.r*1.45,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle='#32e875';
+        ctx.beginPath(); ctx.arc(h.x,h.y,h.r,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle='rgba(7,16,40,0.85)';
+        ctx.beginPath(); ctx.arc(h.x-h.r*0.35,h.y-h.r*0.15,h.r*0.12,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(h.x+h.r*0.35,h.y-h.r*0.15,h.r*0.12,0,Math.PI*2); ctx.fill();
+      }
+    }
+
+    if(!running){
+      ctx.fillStyle='rgba(0,0,0,0.30)'; ctx.fillRect(0,0,c.width,c.height);
+      ctx.fillStyle='#e8eeff'; ctx.textAlign='center';
+      ctx.font=`900 ${Math.floor(Math.min(c.width,c.height)*0.07)}px ui-sans-serif, system-ui`;
+      const msg = (timeLeft<=0 && score>0) ? 'TIME UP' : 'TAP TO START';
+      ctx.fillText(msg, c.width/2, c.height*0.46);
+      ctx.font=`600 ${Math.floor(Math.min(c.width,c.height)*0.03)}px ui-sans-serif, system-ui`;
+      ctx.fillStyle='rgba(232,238,255,0.9)';
+      ctx.fillText(`Score: ${score}`, c.width/2, c.height*0.54);
+    }
+  }
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

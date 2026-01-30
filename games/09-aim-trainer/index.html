@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>Aim Trainer</title>
+  <link rel="stylesheet" href="../_shared.css"/>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title"><b>Aim Trainer</b><span>Tap targets. 30 seconds. Accuracy matters.</span></div>
+    <div class="hud">
+      <div class="chip"><small>Hits</small><b id="hits">0</b></div>
+      <div class="chip"><small>Miss</small><b id="miss">0</b></div>
+      <div class="chip"><small>Acc</small><b id="acc">0%</b></div>
+      <div class="chip"><small>Time</small><b id="time">30</b></div>
+      <button id="btnStart">Start</button>
+      <button id="btnReset">Reset</button>
+      <a class="chip" href="../.."><small>Back</small><b>Home</b></a>
+    </div>
+  </header>
+  <canvas id="c" width="960" height="540"></canvas>
+  <footer>
+    <div>Tap targets. Misses reduce accuracy.</div>
+    <div>Tip: smooth, not frantic.</div>
+  </footer>
+</div>
+<script>
+(() => {
+  const c=document.getElementById('c');
+  const ctx=c.getContext('2d');
+  const elHits=document.getElementById('hits');
+  const elMiss=document.getElementById('miss');
+  const elAcc=document.getElementById('acc');
+  const elTime=document.getElementById('time');
+  const btnStart=document.getElementById('btnStart');
+  const btnReset=document.getElementById('btnReset');
+
+  function fit(){
+    const r=c.getBoundingClientRect();
+    const dpr=Math.min(2, devicePixelRatio||1);
+    const w=Math.max(360, Math.floor(r.width*dpr));
+    const h=Math.max(320, Math.floor((window.innerHeight*0.72)*dpr));
+    if(c.width!==w||c.height!==h){c.width=w;c.height=h;}
+  }
+  new ResizeObserver(fit).observe(c); fit();
+
+  let running=false;
+  let timeLeft=30;
+  let hits=0, miss=0;
+  let target=null;
+  let spawnT=0;
+
+  function reset(){
+    running=false; timeLeft=30; hits=0; miss=0;
+    target=null; spawnT=0;
+    sync();
+  }
+  function start(){
+    running=true;
+    timeLeft=30;
+    hits=0; miss=0;
+    target=null;
+    spawnTarget();
+    sync();
+  }
+
+  function sync(){
+    elHits.textContent=String(hits);
+    elMiss.textContent=String(miss);
+    const shots=hits+miss;
+    const acc=shots? Math.round((hits/shots)*100):0;
+    elAcc.textContent=acc+'%';
+    elTime.textContent=String(Math.ceil(timeLeft));
+    btnStart.textContent=running?'Running':'Start';
+  }
+
+  function spawnTarget(){
+    const r=Math.max(18, Math.min(c.width,c.height)*0.035);
+    const pad=r+18;
+    target={
+      x: pad + Math.random()*(c.width-pad*2),
+      y: pad + Math.random()*(c.height-pad*2),
+      r,
+      born: performance.now(),
+    };
+    spawnT = 0.65 + Math.random()*0.45;
+  }
+
+  btnStart.onclick=()=>{ if(!running) start(); };
+  btnReset.onclick=reset;
+
+  function hitTest(x,y){
+    if(!target) return false;
+    const dx=x-target.x, dy=y-target.y;
+    return dx*dx+dy*dy <= target.r*target.r;
+  }
+
+  c.addEventListener('pointerdown',(e)=>{
+    const r=c.getBoundingClientRect();
+    const dpr=c.width/r.width;
+    const x=(e.clientX-r.left)*dpr;
+    const y=(e.clientY-r.top)*dpr;
+
+    if(!running){ start(); return; }
+
+    if(hitTest(x,y)){
+      hits++;
+      spawnTarget();
+    } else {
+      miss++;
+    }
+    sync();
+  });
+
+  let last=performance.now();
+  function loop(now){
+    const dt=Math.min(0.033,(now-last)/1000); last=now;
+
+    if(running){
+      timeLeft=Math.max(0, timeLeft-dt);
+      spawnT-=dt;
+      if(spawnT<=0) spawnTarget();
+      if(timeLeft<=0){ running=false; target=null; }
+      sync();
+    }
+
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,c.width,c.height);
+
+    // subtle crosshair
+    ctx.strokeStyle='rgba(255,255,255,0.08)';
+    ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(c.width/2, 0); ctx.lineTo(c.width/2, c.height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, c.height/2); ctx.lineTo(c.width, c.height/2); ctx.stroke();
+
+    if(target){
+      // ring
+      ctx.fillStyle='rgba(106,167,255,0.18)';
+      ctx.beginPath(); ctx.arc(target.x,target.y,target.r*1.7,0,Math.PI*2); ctx.fill();
+      // target
+      ctx.fillStyle='#6aa7ff';
+      ctx.beginPath(); ctx.arc(target.x,target.y,target.r,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='rgba(7,16,40,0.9)';
+      ctx.beginPath(); ctx.arc(target.x,target.y,target.r*0.35,0,Math.PI*2); ctx.fill();
+    }
+
+    if(!running){
+      ctx.fillStyle='rgba(0,0,0,0.30)'; ctx.fillRect(0,0,c.width,c.height);
+      ctx.fillStyle='#e8eeff'; ctx.textAlign='center';
+      ctx.font=`900 ${Math.floor(Math.min(c.width,c.height)*0.07)}px ui-sans-serif, system-ui`;
+      ctx.fillText(timeLeft<=0 ? 'DONE' : 'TAP TO START', c.width/2, c.height*0.46);
+      ctx.font=`600 ${Math.floor(Math.min(c.width,c.height)*0.03)}px ui-sans-serif, system-ui`;
+      ctx.fillStyle='rgba(232,238,255,0.9)';
+      ctx.fillText(`Hits: ${hits}  Miss: ${miss}`, c.width/2, c.height*0.54);
+    }
+  }
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

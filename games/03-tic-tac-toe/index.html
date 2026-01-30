@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>Tic-Tac-Toe</title>
+  <link rel="stylesheet" href="../_shared.css"/>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title"><b>Tic‑Tac‑Toe</b><span>Tap to place. You are X. Simple, fast, clean.</span></div>
+    <div class="hud">
+      <div class="chip"><small>Wins</small><b id="wins">0</b></div>
+      <div class="chip"><small>Losses</small><b id="losses">0</b></div>
+      <div class="chip"><small>Draws</small><b id="draws">0</b></div>
+      <button id="btnRestart">New</button>
+      <a class="chip" href="../.."><small>Back</small><b>Home</b></a>
+    </div>
+  </header>
+  <canvas id="c" width="720" height="720"></canvas>
+  <footer>
+    <div>Tap squares. Optional: press <b>R</b> new game.</div>
+    <div>AI: simple but not dumb.</div>
+  </footer>
+</div>
+<script>
+(() => {
+  const c=document.getElementById('c');
+  const ctx=c.getContext('2d');
+  const elW=document.getElementById('wins');
+  const elL=document.getElementById('losses');
+  const elD=document.getElementById('draws');
+  const btn=document.getElementById('btnRestart');
+
+  function fit(){
+    const r=c.getBoundingClientRect();
+    const dpr=Math.min(2, devicePixelRatio||1);
+    const s=Math.floor(Math.min(r.width, window.innerHeight*0.72)*dpr);
+    const size=Math.max(320, s);
+    if(c.width!==size||c.height!==size){c.width=size;c.height=size;}
+  }
+  new ResizeObserver(fit).observe(c); fit();
+
+  const key='mini_ttt_stats_v1';
+  let stats=JSON.parse(localStorage.getItem(key)||'{"w":0,"l":0,"d":0}');
+  function syncStats(){
+    elW.textContent=stats.w; elL.textContent=stats.l; elD.textContent=stats.d;
+    localStorage.setItem(key, JSON.stringify(stats));
+  }
+  syncStats();
+
+  let board=Array(9).fill(null);
+  let turn='X';
+  let over=false;
+  let message='Your move';
+
+  const lines=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  const win=(b,p)=>lines.some(l=>l.every(i=>b[i]===p));
+  const full=(b)=>b.every(Boolean);
+
+  function reset(){
+    board=Array(9).fill(null);
+    turn='X'; over=false; message='Your move';
+  }
+
+  function bestMove(){
+    // 1) win
+    for(let i=0;i<9;i++) if(!board[i]){board[i]='O'; if(win(board,'O')) {board[i]=null; return i;} board[i]=null;}
+    // 2) block
+    for(let i=0;i<9;i++) if(!board[i]){board[i]='X'; if(win(board,'X')) {board[i]=null; return i;} board[i]=null;}
+    // 3) center
+    if(!board[4]) return 4;
+    // 4) corners
+    const corners=[0,2,6,8].filter(i=>!board[i]);
+    if(corners.length) return corners[(Math.random()*corners.length)|0];
+    // 5) edges
+    const edges=[1,3,5,7].filter(i=>!board[i]);
+    return edges[(Math.random()*edges.length)|0];
+  }
+
+  function play(i){
+    if(over||turn!=='X'||board[i]) return;
+    board[i]='X';
+    if(win(board,'X')) return end('You win', 'w');
+    if(full(board)) return end('Draw', 'd');
+    turn='O'; message='AI thinking…';
+    setTimeout(()=>{
+      const m=bestMove();
+      if(m==null) return;
+      board[m]='O';
+      if(win(board,'O')) return end('AI wins', 'l');
+      if(full(board)) return end('Draw', 'd');
+      turn='X'; message='Your move';
+    }, 220);
+  }
+
+  function end(msg, keyStat){
+    over=true; message=msg;
+    stats[keyStat]++; syncStats();
+  }
+
+  c.addEventListener('pointerdown',(e)=>{
+    const r=c.getBoundingClientRect();
+    const dpr=c.width/r.width;
+    const x=(e.clientX-r.left)*dpr;
+    const y=(e.clientY-r.top)*dpr;
+    const cell=Math.min(c.width,c.height)/3;
+    const col=Math.floor(x/cell), row=Math.floor(y/cell);
+    const idx=row*3+col;
+    play(idx);
+  });
+
+  window.addEventListener('keydown',(e)=>{ if(e.key.toLowerCase()==='r') reset();});
+  btn.onclick=reset;
+
+  function draw(){
+    const w=c.width, h=c.height;
+    ctx.clearRect(0,0,w,h);
+    const cell=w/3;
+
+    // board bg
+    ctx.fillStyle='rgba(18,26,51,0.9)';
+    ctx.beginPath(); ctx.roundRect(cell*0.1, cell*0.1, w-cell*0.2, h-cell*0.2, 18); ctx.fill();
+
+    // lines
+    ctx.strokeStyle='rgba(255,255,255,0.15)';
+    ctx.lineWidth=Math.max(4, w*0.01);
+    for(let i=1;i<=2;i++){
+      ctx.beginPath(); ctx.moveTo(i*cell, cell*0.2); ctx.lineTo(i*cell, h-cell*0.2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cell*0.2, i*cell); ctx.lineTo(w-cell*0.2, i*cell); ctx.stroke();
+    }
+
+    // pieces
+    for(let i=0;i<9;i++){
+      const p=board[i];
+      if(!p) continue;
+      const cx=(i%3)*cell+cell/2;
+      const cy=(Math.floor(i/3))*cell+cell/2;
+      const r=cell*0.22;
+      if(p==='X'){
+        ctx.strokeStyle='#6aa7ff';
+        ctx.lineWidth=Math.max(10, w*0.02);
+        ctx.lineCap='round';
+        ctx.beginPath(); ctx.moveTo(cx-r, cy-r); ctx.lineTo(cx+r, cy+r); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx+r, cy-r); ctx.lineTo(cx-r, cy+r); ctx.stroke();
+      } else {
+        ctx.strokeStyle='#32e875';
+        ctx.lineWidth=Math.max(10, w*0.02);
+        ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
+      }
+    }
+
+    // overlay message
+    ctx.fillStyle='rgba(0,0,0,0.30)';
+    ctx.fillRect(0,h*0.82,w,h*0.18);
+    ctx.fillStyle='#e8eeff';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.font=`700 ${Math.floor(w*0.05)}px ui-sans-serif, system-ui`;
+    ctx.fillText(message, w/2, h*0.91);
+
+    requestAnimationFrame(draw);
+  }
+
+  if(!CanvasRenderingContext2D.prototype.roundRect){
+    CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+      r=Math.min(r,w/2,h/2);
+      this.beginPath();
+      this.moveTo(x+r,y);
+      this.arcTo(x+w,y,x+w,y+h,r);
+      this.arcTo(x+w,y+h,x,y+h,r);
+      this.arcTo(x,y+h,x,y,r);
+      this.arcTo(x,y,x+w,y,r);
+      this.closePath();
+      return this;
+    };
+  }
+
+  reset();
+  draw();
+})();
+</script>
+</body>
+</html>

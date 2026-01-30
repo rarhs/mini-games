@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>Memory Match</title>
+  <link rel="stylesheet" href="../_shared.css"/>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title"><b>Memory Match</b><span>Tap cards to find pairs. Minimal, timed.</span></div>
+    <div class="hud">
+      <div class="chip"><small>Moves</small><b id="moves">0</b></div>
+      <div class="chip"><small>Time</small><b id="time">0.0</b></div>
+      <button id="btnRestart">Restart</button>
+      <a class="chip" href="../.."><small>Back</small><b>Home</b></a>
+    </div>
+  </header>
+  <canvas id="c" width="900" height="560"></canvas>
+  <footer>
+    <div>Tap to flip. Match all pairs to win.</div>
+    <div>Tip: slow down—memory beats speed.</div>
+  </footer>
+</div>
+<script>
+(() => {
+  const c=document.getElementById('c');
+  const ctx=c.getContext('2d');
+  const elMoves=document.getElementById('moves');
+  const elTime=document.getElementById('time');
+  const btn=document.getElementById('btnRestart');
+
+  function fit(){
+    const r=c.getBoundingClientRect();
+    const dpr=Math.min(2, devicePixelRatio||1);
+    const w=Math.max(360, Math.floor(r.width*dpr));
+    const h=Math.max(320, Math.floor((window.innerHeight*0.72)*dpr));
+    if(c.width!==w||c.height!==h){c.width=w;c.height=h;}
+  }
+  new ResizeObserver(fit).observe(c); fit();
+
+  const cols=4, rows=4;
+  const total=cols*rows;
+  let cards=[], open=[], matched=0, moves=0;
+  let startT=0, won=false;
+
+  function reset(){
+    // 8 pairs
+    const vals=[];
+    for(let i=1;i<=total/2;i++){vals.push(i,i);} 
+    for(let i=vals.length-1;i>0;i--){const j=(Math.random()*(i+1))|0; [vals[i],vals[j]]=[vals[j],vals[i]];}
+    cards=vals.map((v,idx)=>({v, idx, face:false, lock:false, solved:false}));
+    open=[]; matched=0; moves=0; won=false;
+    startT=performance.now();
+    elMoves.textContent='0';
+  }
+
+  btn.onclick=reset;
+
+  function idxFromPoint(x,y){
+    const pad=c.width*0.05;
+    const gap=c.width*0.02;
+    const w=(c.width-pad*2-gap*(cols-1))/cols;
+    const h=(c.height-pad*2-gap*(rows-1))/rows;
+    for(let r=0;r<rows;r++) for(let col=0;col<cols;col++){
+      const xx=pad+col*(w+gap), yy=pad+r*(h+gap);
+      if(x>=xx&&x<=xx+w&&y>=yy&&y<=yy+h) return r*cols+col;
+    }
+    return -1;
+  }
+
+  function tap(i){
+    const card=cards[i];
+    if(!card||card.solved||card.lock) return;
+    if(open.length===2) return;
+    card.face=true;
+    open.push(i);
+    if(open.length===2){
+      moves++; elMoves.textContent=String(moves);
+      const [a,b]=open.map(j=>cards[j]);
+      if(a.v===b.v){
+        a.solved=b.solved=true;
+        open=[];
+        matched+=2;
+        if(matched===total) won=true;
+      } else {
+        a.lock=b.lock=true;
+        setTimeout(()=>{
+          a.face=b.face=false;
+          a.lock=b.lock=false;
+          open=[];
+        }, 650);
+      }
+    }
+  }
+
+  c.addEventListener('pointerdown',(e)=>{
+    const r=c.getBoundingClientRect();
+    const dpr=c.width/r.width;
+    const x=(e.clientX-r.left)*dpr;
+    const y=(e.clientY-r.top)*dpr;
+    const i=idxFromPoint(x,y);
+    if(i>=0) tap(i);
+  });
+
+  function draw(){
+    ctx.clearRect(0,0,c.width,c.height);
+    const pad=c.width*0.05;
+    const gap=c.width*0.02;
+    const w=(c.width-pad*2-gap*(cols-1))/cols;
+    const h=(c.height-pad*2-gap*(rows-1))/rows;
+
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+
+    for(let r=0;r<rows;r++) for(let col=0;col<cols;col++){
+      const i=r*cols+col;
+      const card=cards[i];
+      const x=pad+col*(w+gap);
+      const y=pad+r*(h+gap);
+
+      // back
+      ctx.fillStyle='rgba(255,255,255,0.06)';
+      ctx.beginPath(); ctx.roundRect(x,y,w,h,14); ctx.fill();
+
+      if(card.face||card.solved){
+        const hue=(210+card.v*18)%360;
+        ctx.fillStyle=`hsl(${hue} 70% 60%)`;
+        ctx.beginPath(); ctx.roundRect(x+4,y+4,w-8,h-8,12); ctx.fill();
+        ctx.fillStyle='rgba(7,16,40,0.9)';
+        ctx.font=`900 ${Math.floor(Math.min(w,h)*0.40)}px ui-sans-serif, system-ui`;
+        ctx.fillText(String(card.v), x+w/2, y+h/2);
+      } else {
+        ctx.fillStyle='rgba(106,167,255,0.16)';
+        ctx.beginPath(); ctx.roundRect(x+4,y+4,w-8,h-8,12); ctx.fill();
+      }
+    }
+
+    // time
+    const t=(performance.now()-startT)/1000;
+    elTime.textContent = t.toFixed(1);
+
+    if(won){
+      ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fillRect(0,0,c.width,c.height);
+      ctx.fillStyle='#e8eeff';
+      ctx.font=`800 ${Math.floor(c.width*0.06)}px ui-sans-serif, system-ui`;
+      ctx.fillText('CLEARED', c.width/2, c.height*0.46);
+      ctx.font=`600 ${Math.floor(c.width*0.03)}px ui-sans-serif, system-ui`;
+      ctx.fillStyle='rgba(232,238,255,0.9)';
+      ctx.fillText(`Moves: ${moves}  Time: ${t.toFixed(1)}s`, c.width/2, c.height*0.54);
+    }
+
+    requestAnimationFrame(draw);
+  }
+
+  if(!CanvasRenderingContext2D.prototype.roundRect){
+    CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+      r=Math.min(r,w/2,h/2);
+      this.beginPath();
+      this.moveTo(x+r,y);
+      this.arcTo(x+w,y,x+w,y+h,r);
+      this.arcTo(x+w,y+h,x,y+h,r);
+      this.arcTo(x,y+h,x,y,r);
+      this.arcTo(x,y,x+w,y,r);
+      this.closePath();
+      return this;
+    };
+  }
+
+  reset();
+  draw();
+})();
+</script>
+</body>
+</html>

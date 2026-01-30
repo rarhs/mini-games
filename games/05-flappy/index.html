@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>Flappy</title>
+  <link rel="stylesheet" href="../_shared.css"/>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title"><b>Flappy</b><span>Tap/click/space to flap. Don’t hit pipes.</span></div>
+    <div class="hud">
+      <div class="chip"><small>Score</small><b id="score">0</b></div>
+      <div class="chip"><small>Best</small><b id="best">0</b></div>
+      <button id="btnRestart">Restart</button>
+      <a class="chip" href="../.."><small>Back</small><b>Home</b></a>
+    </div>
+  </header>
+  <canvas id="c" width="960" height="540"></canvas>
+  <footer>
+    <div>Controls: tap/click • Space • R restart</div>
+    <div>Tip: short taps beat panic taps.</div>
+  </footer>
+</div>
+<script>
+(() => {
+  const c=document.getElementById('c');
+  const ctx=c.getContext('2d');
+  const elScore=document.getElementById('score');
+  const elBest=document.getElementById('best');
+  const btn=document.getElementById('btnRestart');
+
+  function fit(){
+    const r=c.getBoundingClientRect();
+    const dpr=Math.min(2, devicePixelRatio||1);
+    const w=Math.max(360, Math.floor(r.width*dpr));
+    const h=Math.max(320, Math.floor((window.innerHeight*0.72)*dpr));
+    if(c.width!==w||c.height!==h){c.width=w;c.height=h;}
+  }
+  new ResizeObserver(fit).observe(c); fit();
+
+  const keyBest='mini_flappy_best_v1';
+  let best=Number(localStorage.getItem(keyBest)||0);
+  elBest.textContent=best;
+
+  let bird, pipes, score, started, over, t;
+
+  function reset(){
+    bird={x:c.width*0.28, y:c.height*0.5, vy:0, r:18};
+    pipes=[];
+    score=0; started=false; over=false; t=0;
+    elScore.textContent='0';
+    spawnPipe();
+  }
+
+  function spawnPipe(){
+    const gap=Math.max(140, c.height*0.28);
+    const topH=40 + Math.random()*(c.height-gap-80);
+    pipes.push({x:c.width+40, w:70, top:topH, gap, passed:false});
+  }
+
+  function flap(){
+    if(over) { reset(); return; }
+    started=true;
+    bird.vy=-420;
+  }
+
+  window.addEventListener('keydown',(e)=>{
+    const k=e.key.toLowerCase();
+    if(k===' '||k==='arrowup') {e.preventDefault(); flap();}
+    if(k==='r') reset();
+  },{passive:false});
+  c.addEventListener('pointerdown', flap);
+  btn.onclick=reset;
+
+  function setBest(){
+    if(score>best){best=score; localStorage.setItem(keyBest,String(best)); elBest.textContent=best;}
+  }
+
+  function update(dt){
+    t+=dt;
+    if(!started) return;
+    bird.vy += 1100*dt;
+    bird.y += bird.vy*dt;
+
+    // pipes
+    const speed=260;
+    for(const p of pipes){
+      p.x -= speed*dt;
+      if(!p.passed && p.x + p.w < bird.x){ p.passed=true; score++; elScore.textContent=String(score); setBest(); }
+    }
+    if(pipes.length && pipes[0].x + pipes[0].w < -80) pipes.shift();
+    if(pipes.length<4 && pipes[pipes.length-1].x < c.width-260) spawnPipe();
+
+    // collisions
+    if(bird.y-bird.r<0 || bird.y+bird.r>c.height) over=true;
+    for(const p of pipes){
+      const inX = bird.x+bird.r>p.x && bird.x-bird.r<p.x+p.w;
+      if(inX){
+        const gapTop=p.top;
+        const gapBot=p.top+p.gap;
+        if(bird.y-bird.r<gapTop || bird.y+bird.r>gapBot) over=true;
+      }
+    }
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,c.width,c.height);
+    // background
+    ctx.fillStyle='rgba(255,255,255,0.03)';
+    ctx.fillRect(0,0,c.width,c.height);
+
+    // pipes
+    for(const p of pipes){
+      ctx.fillStyle='rgba(50,232,117,0.22)';
+      ctx.fillRect(p.x-6, 0, p.w+12, p.top);
+      ctx.fillRect(p.x-6, p.top+p.gap, p.w+12, c.height-(p.top+p.gap));
+      ctx.fillStyle='#32e875';
+      ctx.fillRect(p.x, 0, p.w, p.top);
+      ctx.fillRect(p.x, p.top+p.gap, p.w, c.height-(p.top+p.gap));
+    }
+
+    // bird
+    ctx.fillStyle='#e8eeff';
+    ctx.beginPath();
+    ctx.arc(bird.x,bird.y,bird.r,0,Math.PI*2);
+    ctx.fill();
+
+    if(!started){
+      ctx.fillStyle='rgba(0,0,0,0.30)'; ctx.fillRect(0,0,c.width,c.height);
+      ctx.fillStyle='#e8eeff';
+      ctx.textAlign='center';
+      ctx.font=`800 ${Math.floor(Math.min(c.width,c.height)*0.07)}px ui-sans-serif, system-ui`;
+      ctx.fillText('TAP TO START', c.width/2, c.height*0.46);
+      ctx.font=`600 ${Math.floor(Math.min(c.width,c.height)*0.03)}px ui-sans-serif, system-ui`;
+      ctx.fillStyle='rgba(232,238,255,0.9)';
+      ctx.fillText('Space also works', c.width/2, c.height*0.54);
+    }
+
+    if(over){
+      ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fillRect(0,0,c.width,c.height);
+      ctx.fillStyle='#e8eeff';
+      ctx.textAlign='center';
+      ctx.font=`900 ${Math.floor(Math.min(c.width,c.height)*0.08)}px ui-sans-serif, system-ui`;
+      ctx.fillText('GAME OVER', c.width/2, c.height*0.46);
+      ctx.font=`600 ${Math.floor(Math.min(c.width,c.height)*0.03)}px ui-sans-serif, system-ui`;
+      ctx.fillStyle='rgba(232,238,255,0.9)';
+      ctx.fillText('Tap to restart', c.width/2, c.height*0.55);
+    }
+  }
+
+  let last=performance.now();
+  function loop(now){
+    const dt=Math.min(0.033,(now-last)/1000); last=now;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

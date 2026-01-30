@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>Snake</title>
+  <link rel="stylesheet" href="../_shared.css"/>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title"><b>Snake</b><span>Swipe/arrow keys. Eat food, don’t hit walls or yourself.</span></div>
+    <div class="hud">
+      <div class="chip"><small>Score</small><b id="score">0</b></div>
+      <div class="chip"><small>Best</small><b id="best">0</b></div>
+      <button id="btnPause">Pause</button>
+      <button id="btnRestart">Restart</button>
+      <a class="chip" href="../.."><small>Back</small><b>Home</b></a>
+    </div>
+  </header>
+  <canvas id="c" width="900" height="520"></canvas>
+  <footer>
+    <div>Controls: <b>Arrow/WASD</b> • Mobile: <b>swipe</b> • P pause • R restart</div>
+    <div>Tip: you can’t reverse direction.</div>
+  </footer>
+</div>
+<script>
+(() => {
+  const c = document.getElementById('c');
+  const ctx = c.getContext('2d');
+  const elScore = document.getElementById('score');
+  const elBest = document.getElementById('best');
+  const btnPause = document.getElementById('btnPause');
+  const btnRestart = document.getElementById('btnRestart');
+
+  function fit(){
+    const r=c.getBoundingClientRect();
+    const dpr=Math.min(2, devicePixelRatio||1);
+    const w=Math.max(320, Math.floor(r.width*dpr));
+    const h=Math.max(240, Math.floor((window.innerHeight*0.72)*dpr));
+    if (c.width!==w||c.height!==h){c.width=w;c.height=h;}
+  }
+  new ResizeObserver(fit).observe(c); fit();
+
+  const keyBest='mini_snake_best_v1';
+  let best=Number(localStorage.getItem(keyBest)||0);
+  elBest.textContent=best;
+
+  const grid=22; // pixels per cell in internal coords (scaled by dpr)
+  let paused=false, over=false;
+  let dir={x:1,y:0}, nextDir={x:1,y:0};
+  let snake=[], food={x:0,y:0};
+  let score=0;
+  let acc=0;
+  let stepMs=120;
+
+  function cellW(){return Math.floor(c.width/grid);}
+  function cellH(){return Math.floor(c.height/grid);}
+
+  function rndFood(){
+    const W=cellW(), H=cellH();
+    while(true){
+      const x=(Math.random()*W)|0, y=(Math.random()*H)|0;
+      if (!snake.some(s=>s.x===x&&s.y===y)) {food={x,y}; return;}
+    }
+  }
+
+  function reset(){
+    paused=false; over=false;
+    score=0; elScore.textContent=0;
+    dir={x:1,y:0}; nextDir={x:1,y:0};
+    const W=cellW(), H=cellH();
+    const sx=(W/2)|0, sy=(H/2)|0;
+    snake=[{x:sx,y:sy},{x:sx-1,y:sy},{x:sx-2,y:sy}];
+    rndFood();
+    acc=0;
+    stepMs=120;
+    btnPause.textContent='Pause';
+  }
+
+  function setBest(){
+    if (score>best){best=score; localStorage.setItem(keyBest,String(best)); elBest.textContent=best;}
+  }
+
+  function togglePause(){
+    if(over) return;
+    paused=!paused;
+    btnPause.textContent=paused?'Resume':'Pause';
+  }
+
+  btnPause.onclick=togglePause;
+  btnRestart.onclick=reset;
+
+  const keys=new Set();
+  window.addEventListener('keydown', (e)=>{
+    const k=e.key.toLowerCase();
+    if(['arrowup','arrowdown','arrowleft','arrowright','w','a','s','d','p','r'].includes(k)) e.preventDefault();
+    if(k==='p') togglePause();
+    if(k==='r') reset();
+    keys.add(k);
+    if(['arrowup','w'].includes(k)) changeDir(0,-1);
+    if(['arrowdown','s'].includes(k)) changeDir(0,1);
+    if(['arrowleft','a'].includes(k)) changeDir(-1,0);
+    if(['arrowright','d'].includes(k)) changeDir(1,0);
+  },{passive:false});
+  window.addEventListener('keyup', (e)=>keys.delete(e.key.toLowerCase()));
+
+  function changeDir(x,y){
+    // prevent reverse
+    if (x===-dir.x && y===-dir.y) return;
+    nextDir={x,y};
+  }
+
+  // Touch swipe
+  let touch0=null;
+  c.addEventListener('pointerdown',(e)=>{touch0={x:e.clientX,y:e.clientY,t:performance.now()};});
+  c.addEventListener('pointerup',(e)=>{
+    if(!touch0) return;
+    const dx=e.clientX-touch0.x, dy=e.clientY-touch0.y;
+    const ax=Math.abs(dx), ay=Math.abs(dy);
+    if(Math.max(ax,ay) < 18) { touch0=null; return; }
+    if(ax>ay) changeDir(dx>0?1:-1,0); else changeDir(0,dy>0?1:-1);
+    touch0=null;
+  });
+
+  function tick(){
+    dir=nextDir;
+    const head={...snake[0]};
+    head.x+=dir.x; head.y+=dir.y;
+    const W=cellW(), H=cellH();
+    // wall
+    if(head.x<0||head.y<0||head.x>=W||head.y>=H) return die();
+    // self
+    if(snake.some(s=>s.x===head.x&&s.y===head.y)) return die();
+
+    snake.unshift(head);
+    if(head.x===food.x && head.y===food.y){
+      score+=10;
+      elScore.textContent=score;
+      setBest();
+      rndFood();
+      // speed up a bit
+      stepMs=Math.max(60, stepMs-2);
+    } else {
+      snake.pop();
+    }
+  }
+
+  function die(){
+    over=true;
+    paused=true;
+    btnPause.textContent='Game Over';
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,c.width,c.height);
+    const W=cellW(), H=cellH();
+    // grid
+    ctx.globalAlpha=0.25;
+    ctx.strokeStyle='rgba(255,255,255,0.06)';
+    for(let x=0;x<=W;x++){
+      ctx.beginPath(); ctx.moveTo(x*grid,0); ctx.lineTo(x*grid,H*grid); ctx.stroke();
+    }
+    for(let y=0;y<=H;y++){
+      ctx.beginPath(); ctx.moveTo(0,y*grid); ctx.lineTo(W*grid,y*grid); ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+
+    // food
+    ctx.fillStyle='#32e875';
+    ctx.beginPath();
+    ctx.roundRect(food.x*grid+3, food.y*grid+3, grid-6, grid-6, 6);
+    ctx.fill();
+
+    // snake
+    for(let i=0;i<snake.length;i++){
+      const s=snake[i];
+      ctx.fillStyle = i===0 ? '#e8eeff' : 'rgba(232,238,255,0.85)';
+      ctx.beginPath();
+      ctx.roundRect(s.x*grid+2, s.y*grid+2, grid-4, grid-4, 6);
+      ctx.fill();
+    }
+
+    if(paused){
+      ctx.fillStyle='rgba(0,0,0,0.35)';
+      ctx.fillRect(0,0,c.width,c.height);
+      ctx.fillStyle='#e8eeff';
+      ctx.textAlign='center';
+      ctx.font=`700 ${Math.floor(Math.min(c.width,c.height)*0.07)}px ui-sans-serif, system-ui`;
+      ctx.fillText(over?'GAME OVER':'PAUSED', c.width/2, c.height*0.48);
+      ctx.font=`500 ${Math.floor(Math.min(c.width,c.height)*0.03)}px ui-sans-serif, system-ui`;
+      ctx.fillStyle='rgba(232,238,255,0.9)';
+      ctx.fillText(over?'Press R to restart':'Press P to resume', c.width/2, c.height*0.56);
+    }
+  }
+
+  let last=performance.now();
+  function loop(now){
+    const dt=now-last; last=now;
+    if(!paused){
+      acc+=dt;
+      while(acc>=stepMs){acc-=stepMs; tick();}
+    }
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

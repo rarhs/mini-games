@@ -7,29 +7,46 @@
   <style>
     :root{--bg:#0b1020;--panel:#121a33;--text:#e8eeff;--muted:#9db0ff;--accent:#6aa7ff}
     html,body{height:100%;margin:0;background:radial-gradient(1200px 700px at 50% 20%, #16214a 0%, var(--bg) 60%);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
-    .wrap{max-width:920px;margin:0 auto;padding:18px;box-sizing:border-box}
+    .wrap{max-width:980px;margin:0 auto;padding:18px;box-sizing:border-box}
     h1{margin:10px 0 6px;font-size:22px}
     p{margin:0 0 14px;color:var(--muted)}
-    .card{background:rgba(18,26,51,0.9);border:1px solid rgba(255,255,255,0.10);border-radius:14px;padding:14px;margin:12px 0;display:flex;justify-content:space-between;gap:12px;align-items:center}
-    a{color:var(--text);text-decoration:none;font-weight:700}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    @media (max-width:860px){.grid{grid-template-columns:1fr}}
+    .card{background:rgba(18,26,51,0.9);border:1px solid rgba(255,255,255,0.10);border-radius:14px;padding:14px;display:flex;justify-content:space-between;gap:12px;align-items:center}
+    a{color:var(--text);text-decoration:none;font-weight:800}
     a:hover{color:var(--accent)}
     .hint{font-size:12px;color:var(--muted)}
+    .tag{font-size:11px;color:var(--muted);border:1px solid rgba(255,255,255,0.10);padding:3px 8px;border-radius:999px}
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>mini-games</h1>
-    <p>A tiny collection of web games.</p>
+    <p>Minimal web games. Mobile friendly (touch + swipe).</p>
 
-    <div class="card">
-      <div>
-        <a href="./game-dodge-collect/">Dodge &amp; Collect</a>
-        <div class="hint">Collect green, dodge red. Keyboard or touch.</div>
+    <div class="grid">
+      <div class="card">
+        <div>
+          <div class="tag">arcade</div>
+          <a href="./game-dodge-collect/">Dodge &amp; Collect</a>
+          <div class="hint">Collect green, dodge red. Keyboard or touch.</div>
+        </div>
+        <div class="hint">→</div>
       </div>
-      <div class="hint">→</div>
+
+      <div class="card"><div><div class="tag">classic</div><a href="./games/01-snake/">Snake</a><div class="hint">Eat food. Avoid walls + yourself.</div></div><div class="hint">→</div></div>
+      <div class="card"><div><div class="tag">puzzle</div><a href="./games/02-2048/">2048</a><div class="hint">Swipe to merge tiles.</div></div><div class="hint">→</div></div>
+      <div class="card"><div><div class="tag">board</div><a href="./games/03-tic-tac-toe/">Tic‑Tac‑Toe</a><div class="hint">Play vs a simple AI.</div></div><div class="hint">→</div></div>
+      <div class="card"><div><div class="tag">memory</div><a href="./games/04-memory-match/">Memory Match</a><div class="hint">Find pairs. Beat your time.</div></div><div class="hint">→</div></div>
+      <div class="card"><div><div class="tag">arcade</div><a href="./games/05-flappy/">Flappy</a><div class="hint">Tap to flap. Avoid pipes.</div></div><div class="hint">→</div></div>
+      <div class="card"><div><div class="tag">arcade</div><a href="./games/06-breakout/">Breakout</a><div class="hint">Drag paddle. Break bricks.</div></div><div class="hint">→</div></div>
+      <div class="card"><div><div class="tag">reaction</div><a href="./games/07-whack-a-mole/">Whack‑a‑Mole</a><div class="hint">30 seconds. Tap the mole.</div></div><div class="hint">→</div></div>
+      <div class="card"><div><div class="tag">classic</div><a href="./games/08-pong/">Pong</a><div class="hint">Drag paddle. First to 7.</div></div><div class="hint">→</div></div>
+      <div class="card"><div><div class="tag">trainer</div><a href="./games/09-aim-trainer/">Aim Trainer</a><div class="hint">Targets + accuracy (30s).</div></div><div class="hint">→</div></div>
+      <div class="card"><div><div class="tag">logic</div><a href="./games/10-minesweeper/">Minesweeper</a><div class="hint">Tap reveal, long‑press flag.</div></div><div class="hint">→</div></div>
     </div>
 
-    <p class="hint">Tip: If you enabled GitHub Pages, this page is your landing screen.</p>
+    <p class="hint" style="margin-top:14px;">GitHub Pages: <a href="https://rarhs.github.io/mini-games/">rarhs.github.io/mini-games</a></p>
   </div>
 </body>
 </html>

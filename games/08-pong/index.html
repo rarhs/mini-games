@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>Pong</title>
+  <link rel="stylesheet" href="../_shared.css"/>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title"><b>Pong</b><span>Drag to move your paddle. First to 7 wins.</span></div>
+    <div class="hud">
+      <div class="chip"><small>You</small><b id="p1">0</b></div>
+      <div class="chip"><small>AI</small><b id="p2">0</b></div>
+      <button id="btnPause">Pause</button>
+      <button id="btnRestart">Restart</button>
+      <a class="chip" href="../.."><small>Back</small><b>Home</b></a>
+    </div>
+  </header>
+  <canvas id="c" width="960" height="540"></canvas>
+  <footer>
+    <div>Mobile: drag anywhere • Desktop: mouse move • P pause • R restart</div>
+    <div>Tip: hit with paddle edges for angles.</div>
+  </footer>
+</div>
+<script>
+(() => {
+  const c=document.getElementById('c');
+  const ctx=c.getContext('2d');
+  const el1=document.getElementById('p1');
+  const el2=document.getElementById('p2');
+  const btnPause=document.getElementById('btnPause');
+  const btnRestart=document.getElementById('btnRestart');
+
+  function fit(){
+    const r=c.getBoundingClientRect();
+    const dpr=Math.min(2, devicePixelRatio||1);
+    const w=Math.max(360, Math.floor(r.width*dpr));
+    const h=Math.max(320, Math.floor((window.innerHeight*0.72)*dpr));
+    if(c.width!==w||c.height!==h){c.width=w;c.height=h;}
+  }
+  new ResizeObserver(fit).observe(c); fit();
+
+  let p1, p2, ball, score1=0, score2=0, paused=false, over=false;
+  let pointerY=null;
+
+  function resetRound(dir){
+    ball={x:c.width/2,y:c.height/2,r:10,vx:dir*340,vy:(Math.random()*2-1)*220};
+  }
+
+  function reset(){
+    p1={x:40,y:c.height/2,w:14,h:c.height*0.18};
+    p2={x:c.width-40,y:c.height/2,w:14,h:c.height*0.18};
+    score1=0; score2=0; paused=false; over=false;
+    resetRound(Math.random()<0.5?1:-1);
+    sync();
+    btnPause.textContent='Pause';
+  }
+
+  function sync(){ el1.textContent=String(score1); el2.textContent=String(score2); }
+
+  function togglePause(){ if(over) return; paused=!paused; btnPause.textContent=paused?'Resume':'Pause'; }
+  btnPause.onclick=togglePause;
+  btnRestart.onclick=reset;
+
+  window.addEventListener('keydown',(e)=>{
+    const k=e.key.toLowerCase();
+    if(['p','r'].includes(k)) e.preventDefault();
+    if(k==='p') togglePause();
+    if(k==='r') reset();
+  },{passive:false});
+
+  c.addEventListener('pointermove',(e)=>{
+    const r=c.getBoundingClientRect();
+    const dpr=c.width/r.width;
+    pointerY=(e.clientY-r.top)*dpr;
+  });
+  c.addEventListener('pointerdown',()=>{ if(over) reset(); });
+
+  function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+
+  function step(dt){
+    // player paddle follows pointer
+    if(pointerY!=null) p1.y = pointerY;
+    p1.y = clamp(p1.y, p1.h/2+10, c.height-p1.h/2-10);
+
+    // AI paddle
+    const target = ball.y;
+    const aiSpeed = 360;
+    const dy = target - p2.y;
+    p2.y += clamp(dy, -aiSpeed*dt, aiSpeed*dt);
+    p2.y = clamp(p2.y, p2.h/2+10, c.height-p2.h/2-10);
+
+    // ball
+    ball.x += ball.vx*dt;
+    ball.y += ball.vy*dt;
+
+    // walls
+    if(ball.y-ball.r<0){ball.y=ball.r; ball.vy*=-1;}
+    if(ball.y+ball.r>c.height){ball.y=c.height-ball.r; ball.vy*=-1;}
+
+    // paddle collision
+    function hitPaddle(p, dir){
+      const px=p.x-p.w/2, py=p.y-p.h/2;
+      if(ball.x+ball.r<px||ball.x-ball.r>px+p.w||ball.y+ball.r<py||ball.y-ball.r>py+p.h) return;
+      // reflect
+      ball.x = dir>0 ? (px - ball.r) : (px + p.w + ball.r);
+      const rel = (ball.y - p.y)/(p.h/2);
+      const speed = Math.min(680, Math.hypot(ball.vx, ball.vy) + 18);
+      const angle = rel * (Math.PI*0.35);
+      ball.vx = dir * Math.cos(angle) * speed;
+      ball.vy = Math.sin(angle) * speed;
+    }
+    hitPaddle(p1, +1);
+    hitPaddle(p2, -1);
+
+    // score
+    if(ball.x < -60){
+      score2++; sync();
+      if(score2>=7){ over=true; paused=true; btnPause.textContent='Game Over'; return; }
+      resetRound(+1);
+    }
+    if(ball.x > c.width+60){
+      score1++; sync();
+      if(score1>=7){ over=true; paused=true; btnPause.textContent='Game Over'; return; }
+      resetRound(-1);
+    }
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,c.width,c.height);
+
+    // mid line
+    ctx.strokeStyle='rgba(255,255,255,0.10)';
+    ctx.lineWidth=4;
+    ctx.setLineDash([14,14]);
+    ctx.beginPath(); ctx.moveTo(c.width/2, 20); ctx.lineTo(c.width/2, c.height-20); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // paddles
+    ctx.fillStyle='#e8eeff';
+    ctx.beginPath(); ctx.roundRect(p1.x-p1.w/2,p1.y-p1.h/2,p1.w,p1.h,10); ctx.fill();
+    ctx.fillStyle='rgba(232,238,255,0.75)';
+    ctx.beginPath(); ctx.roundRect(p2.x-p2.w/2,p2.y-p2.h/2,p2.w,p2.h,10); ctx.fill();
+
+    // ball
+    ctx.fillStyle='#6aa7ff';
+    ctx.beginPath(); ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2); ctx.fill();
+
+    if(paused){
+      ctx.fillStyle='rgba(0,0,0,0.30)'; ctx.fillRect(0,0,c.width,c.height);
+      ctx.fillStyle='#e8eeff'; ctx.textAlign='center';
+      ctx.font=`900 ${Math.floor(Math.min(c.width,c.height)*0.08)}px ui-sans-serif, system-ui`;
+      ctx.fillText(over ? (score1>score2?'YOU WIN':'AI WINS') : 'PAUSED', c.width/2, c.height*0.46);
+      ctx.font=`600 ${Math.floor(Math.min(c.width,c.height)*0.03)}px ui-sans-serif, system-ui`;
+      ctx.fillStyle='rgba(232,238,255,0.9)';
+      ctx.fillText(over?'Tap Restart':'Press P to resume', c.width/2, c.height*0.55);
+    }
+  }
+
+  if(!CanvasRenderingContext2D.prototype.roundRect){
+    CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+      r=Math.min(r,w/2,h/2);
+      this.beginPath();
+      this.moveTo(x+r,y);
+      this.arcTo(x+w,y,x+w,y+h,r);
+      this.arcTo(x+w,y+h,x,y+h,r);
+      this.arcTo(x,y+h,x,y,r);
+      this.arcTo(x,y,x+w,y,r);
+      this.closePath();
+      return this;
+    };
+  }
+
+  let last=performance.now();
+  function loop(now){
+    const dt=Math.min(0.033,(now-last)/1000); last=now;
+    if(!paused) step(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

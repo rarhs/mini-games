@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>Minesweeper</title>
+  <link rel="stylesheet" href="../_shared.css"/>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title"><b>Minesweeper</b><span>Tap to reveal. Long‑press to flag. Avoid mines.</span></div>
+    <div class="hud">
+      <div class="chip"><small>Mines</small><b id="mines">10</b></div>
+      <div class="chip"><small>Flags</small><b id="flags">0</b></div>
+      <div class="chip"><small>Status</small><b id="status">Ready</b></div>
+      <button id="btnRestart">Restart</button>
+      <a class="chip" href="../.."><small>Back</small><b>Home</b></a>
+    </div>
+  </header>
+  <canvas id="c" width="900" height="560"></canvas>
+  <footer>
+    <div>Tap reveal • Long press flag • R restart</div>
+    <div>Tip: first click is always safe.</div>
+  </footer>
+</div>
+<script>
+(() => {
+  const c=document.getElementById('c');
+  const ctx=c.getContext('2d');
+  const elM=document.getElementById('mines');
+  const elF=document.getElementById('flags');
+  const elS=document.getElementById('status');
+  const btn=document.getElementById('btnRestart');
+
+  function fit(){
+    const r=c.getBoundingClientRect();
+    const dpr=Math.min(2, devicePixelRatio||1);
+    const w=Math.max(360, Math.floor(r.width*dpr));
+    const h=Math.max(320, Math.floor((window.innerHeight*0.72)*dpr));
+    if(c.width!==w||c.height!==h){c.width=w;c.height=h;}
+  }
+  new ResizeObserver(fit).observe(c); fit();
+
+  const W=10, H=10;
+  const M=10;
+  let grid, revealed, flagged, minesPlaced=false, over=false, won=false;
+
+  function make2D(v){
+    return Array.from({length:H},()=>Array.from({length:W},()=>v));
+  }
+
+  function neighbors(x,y){
+    const out=[];
+    for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+      if(!dx && !dy) continue;
+      const nx=x+dx, ny=y+dy;
+      if(nx>=0&&ny>=0&&nx<W&&ny<H) out.push([nx,ny]);
+    }
+    return out;
+  }
+
+  function placeMines(sx,sy){
+    // ensure first click safe (and its neighbors safe)
+    const safe=new Set([`${sx},${sy}`,...neighbors(sx,sy).map(([x,y])=>`${x},${y}`)]);
+    let placed=0;
+    while(placed<M){
+      const x=(Math.random()*W)|0, y=(Math.random()*H)|0;
+      const k=`${x},${y}`;
+      if(safe.has(k)) continue;
+      if(grid[y][x]===-1) continue;
+      grid[y][x]=-1; placed++;
+    }
+    // numbers
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+      if(grid[y][x]===-1) continue;
+      let n=0;
+      for(const [nx,ny] of neighbors(x,y)) if(grid[ny][nx]===-1) n++;
+      grid[y][x]=n;
+    }
+    minesPlaced=true;
+  }
+
+  function reset(){
+    grid=make2D(0);
+    revealed=make2D(false);
+    flagged=make2D(false);
+    minesPlaced=false;
+    over=false; won=false;
+    elM.textContent=String(M);
+    elF.textContent='0';
+    elS.textContent='Ready';
+  }
+
+  btn.onclick=reset;
+  window.addEventListener('keydown',(e)=>{ if(e.key.toLowerCase()==='r') reset(); });
+
+  function counts(){
+    let f=0;
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++) if(flagged[y][x]) f++;
+    elF.textContent=String(f);
+  }
+
+  function reveal(x,y){
+    if(over||flagged[y][x]||revealed[y][x]) return;
+    if(!minesPlaced) placeMines(x,y);
+    revealed[y][x]=true;
+    if(grid[y][x]===-1){
+      over=true; won=false; elS.textContent='Boom';
+      // reveal all mines
+      for(let yy=0;yy<H;yy++) for(let xx=0;xx<W;xx++) if(grid[yy][xx]===-1) revealed[yy][xx]=true;
+      return;
+    }
+    if(grid[y][x]===0){
+      // flood
+      const q=[[x,y]];
+      while(q.length){
+        const [cx,cy]=q.pop();
+        for(const [nx,ny] of neighbors(cx,cy)){
+          if(revealed[ny][nx]||flagged[ny][nx]) continue;
+          revealed[ny][nx]=true;
+          if(grid[ny][nx]===0) q.push([nx,ny]);
+        }
+      }
+    }
+    checkWin();
+  }
+
+  function toggleFlag(x,y){
+    if(over||revealed[y][x]) return;
+    flagged[y][x]=!flagged[y][x];
+    counts();
+    checkWin();
+  }
+
+  function checkWin(){
+    // win when all non-mines revealed
+    let ok=true;
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+      if(grid[y][x]!==-1 && !revealed[y][x]) ok=false;
+    }
+    if(ok && minesPlaced){
+      over=true; won=true; elS.textContent='Cleared';
+    }
+  }
+
+  function cellRect(){
+    const pad=c.width*0.06;
+    const size=Math.min((c.width-pad*2)/W, (c.height-pad*2)/H);
+    const ox=(c.width - size*W)/2;
+    const oy=(c.height - size*H)/2;
+    return {size, ox, oy};
+  }
+
+  function cellAt(px,py){
+    const {size,ox,oy}=cellRect();
+    const x=Math.floor((px-ox)/size);
+    const y=Math.floor((py-oy)/size);
+    if(x<0||y<0||x>=W||y>=H) return null;
+    return {x,y};
+  }
+
+  let pressTimer=null;
+  let downCell=null;
+  c.addEventListener('pointerdown',(e)=>{
+    const r=c.getBoundingClientRect();
+    const dpr=c.width/r.width;
+    const x=(e.clientX-r.left)*dpr;
+    const y=(e.clientY-r.top)*dpr;
+    const cell=cellAt(x,y);
+    if(!cell) return;
+    downCell=cell;
+    pressTimer=setTimeout(()=>{
+      toggleFlag(cell.x, cell.y);
+      pressTimer=null;
+    }, 420);
+  });
+  c.addEventListener('pointerup',(e)=>{
+    if(!downCell) return;
+    if(pressTimer){
+      clearTimeout(pressTimer);
+      pressTimer=null;
+      reveal(downCell.x, downCell.y);
+    }
+    downCell=null;
+  });
+  c.addEventListener('pointercancel',()=>{ if(pressTimer) clearTimeout(pressTimer); pressTimer=null; downCell=null; });
+
+  function draw(){
+    ctx.clearRect(0,0,c.width,c.height);
+    const {size,ox,oy}=cellRect();
+
+    // board bg
+    ctx.fillStyle='rgba(18,26,51,0.9)';
+    ctx.beginPath(); ctx.roundRect(ox-10, oy-10, size*W+20, size*H+20, 16); ctx.fill();
+
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+      const rx=ox+x*size;
+      const ry=oy+y*size;
+
+      const isRev=revealed[y][x];
+      const isFlag=flagged[y][x];
+      ctx.fillStyle = isRev ? 'rgba(255,255,255,0.06)' : 'rgba(106,167,255,0.12)';
+      ctx.beginPath(); ctx.roundRect(rx+2,ry+2,size-4,size-4,10); ctx.fill();
+
+      if(isFlag && !isRev){
+        ctx.fillStyle='#ff4d6d';
+        ctx.beginPath();
+        ctx.moveTo(rx+size*0.32, ry+size*0.75);
+        ctx.lineTo(rx+size*0.32, ry+size*0.25);
+        ctx.lineTo(rx+size*0.70, ry+size*0.35);
+        ctx.lineTo(rx+size*0.32, ry+size*0.45);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      if(isRev){
+        const v=grid[y][x];
+        if(v===-1){
+          ctx.fillStyle='#ff4d6d';
+          ctx.beginPath(); ctx.arc(rx+size/2, ry+size/2, size*0.18, 0, Math.PI*2); ctx.fill();
+        } else if(v>0){
+          const hue=(210 - v*20 + 360)%360;
+          ctx.fillStyle=`hsl(${hue} 70% 70%)`;
+          ctx.font=`900 ${Math.floor(size*0.40)}px ui-sans-serif, system-ui`;
+          ctx.fillText(String(v), rx+size/2, ry+size/2);
+        }
+      }
+    }
+
+    if(over){
+      ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fillRect(0,0,c.width,c.height);
+      ctx.fillStyle='#e8eeff'; ctx.textAlign='center';
+      ctx.font=`900 ${Math.floor(Math.min(c.width,c.height)*0.07)}px ui-sans-serif, system-ui`;
+      ctx.fillText(won?'CLEARED':'BOOM', c.width/2, c.height*0.46);
+      ctx.font=`600 ${Math.floor(Math.min(c.width,c.height)*0.03)}px ui-sans-serif, system-ui`;
+      ctx.fillStyle='rgba(232,238,255,0.9)';
+      ctx.fillText('Press R to restart', c.width/2, c.height*0.55);
+    }
+
+    requestAnimationFrame(draw);
+  }
+
+  if(!CanvasRenderingContext2D.prototype.roundRect){
+    CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+      r=Math.min(r,w/2,h/2);
+      this.beginPath();
+      this.moveTo(x+r,y);
+      this.arcTo(x+w,y,x+w,y+h,r);
+      this.arcTo(x+w,y+h,x,y+h,r);
+      this.arcTo(x,y+h,x,y,r);
+      this.arcTo(x,y,x+w,y,r);
+      this.closePath();
+      return this;
+    };
+  }
+
+  reset();
+  draw();
+})();
+</script>
+</body>
+</html>
