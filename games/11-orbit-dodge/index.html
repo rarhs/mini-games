@@ -31,8 +31,9 @@
 </div>
 
 <script type="module">
-  import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
-  import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+  // Local copies of Three.js to avoid CDN blocks.
+  import * as THREE from './assets/js/three.module.js';
+  import { GLTFLoader } from './assets/js/GLTFLoader.js';
 
   const canvas = document.getElementById('c');
   const scoreEl = document.getElementById('score');
@@ -43,9 +44,39 @@
   let best = Number(localStorage.getItem(BEST_KEY) || 0);
   bestEl.textContent = String(best);
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  function showFatal(msg){
+    const div = document.createElement('div');
+    div.style.position='absolute';
+    div.style.left='0';
+    div.style.right='0';
+    div.style.top='0';
+    div.style.bottom='0';
+    div.style.display='grid';
+    div.style.placeItems='center';
+    div.style.background='rgba(0,0,0,0.45)';
+    div.style.color='#e8eeff';
+    div.style.fontFamily='ui-sans-serif,system-ui';
+    div.style.zIndex='999';
+    div.innerHTML = `
+      <div style="text-align:center; padding:18px 16px; max-width:560px;">
+        <div style="font-weight:900; font-size:28px;">CANVAS / WEBGL ERROR</div>
+        <div style="opacity:.9; margin-top:10px; font-weight:600; line-height:1.4;">${msg}</div>
+        <div style="opacity:.8; margin-top:12px; font-size:13px;">If you’re on Chrome: Settings → System → enable Hardware Acceleration, then restart Chrome.</div>
+      </div>
+    `;
+    document.body.appendChild(div);
+  }
+
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+  } catch (e) {
+    console.error(e);
+    showFatal('Your browser/device cannot start WebGL. This game needs WebGL to run.');
+    throw e;
+  }
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x0b1020, 10, 55);
@@ -193,9 +224,10 @@
 
   function fit(){
     const rect = canvas.getBoundingClientRect();
-    const w = Math.max(360, Math.floor(rect.width));
+    const w = Math.max(360, Math.floor(rect.width || (window.innerWidth - 24)));
     const h = Math.max(320, Math.floor(window.innerHeight * 0.72));
-    renderer.setSize(w, h, false);
+    // updateStyle=true so the canvas is visible even if CSS height collapses.
+    renderer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   }
