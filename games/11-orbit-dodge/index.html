@@ -32,6 +32,7 @@
 
 <script type="module">
   import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+  import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
 
   const canvas = document.getElementById('c');
   const scoreEl = document.getElementById('score');
@@ -79,11 +80,41 @@
   }
   rail(-5.2); rail(5.2);
 
-  // Player
-  const player = new THREE.Mesh(
-    new THREE.SphereGeometry(0.6, 24, 24),
-    new THREE.MeshStandardMaterial({ color: 0xe8eeff, roughness: 0.35, metalness: 0.1 })
-  );
+  // Loading overlay
+  const loading = document.createElement('div');
+  loading.id = 'loading';
+  loading.style.position = 'absolute';
+  loading.style.left = '0';
+  loading.style.right = '0';
+  loading.style.top = '0';
+  loading.style.bottom = '0';
+  loading.style.display = 'grid';
+  loading.style.placeItems = 'center';
+  loading.style.background = 'rgba(0,0,0,0.25)';
+  loading.style.backdropFilter = 'blur(2px)';
+  loading.style.color = '#e8eeff';
+  loading.style.fontFamily = 'ui-sans-serif,system-ui';
+  loading.style.zIndex = '10';
+  loading.innerHTML = `
+    <div style="text-align:center; padding:18px 16px; max-width:520px;">
+      <div style="font-weight:900; font-size:34px; letter-spacing:.5px;">LOADING ASSETS</div>
+      <div style="opacity:.9; margin-top:10px; font-weight:600;">Low‑poly models (Kenney CC0)</div>
+    </div>
+  `;
+  document.body.appendChild(loading);
+
+  // Assets
+  const loader = new GLTFLoader();
+  const assets = { character: null, car: null, truck: null };
+
+  function loadGLB(url) {
+    return new Promise((resolve, reject) => {
+      loader.load(url, (gltf) => resolve(gltf.scene), undefined, reject);
+    });
+  }
+
+  // Player container (we'll attach the character model here)
+  const player = new THREE.Group();
   player.position.set(0, -0.1, 0);
   scene.add(player);
 
@@ -97,15 +128,34 @@
 
   // Obstacles
   const obstacles = [];
-  const obsGeo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
-  const obsMat = new THREE.MeshStandardMaterial({ color: 0x32e875, roughness: 0.55, metalness: 0.05, emissive: 0x062013 });
+  const fallbackObsGeo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
+  const fallbackObsMat = new THREE.MeshStandardMaterial({ color: 0x32e875, roughness: 0.55, metalness: 0.05, emissive: 0x062013 });
+
+  function cloneModel(src) {
+    // Simple clone is enough for these static glb scenes
+    return src ? src.clone(true) : null;
+  }
 
   function spawnObstacle(){
-    const m = new THREE.Mesh(obsGeo, obsMat);
     const lane = (Math.random() * 3) | 0; // 0,1,2
     const x = (lane - 1) * 2.4; // -2.4, 0, +2.4
-    m.position.set(x, -0.1, -40);
-    m.rotation.set(Math.random()*0.6, Math.random()*0.6, Math.random()*0.6);
+
+    let m;
+    const useTruck = Math.random() < 0.35;
+    const model = useTruck ? assets.truck : assets.car;
+    if(model){
+      m = cloneModel(model);
+    } else {
+      m = new THREE.Mesh(fallbackObsGeo, fallbackObsMat);
+    }
+
+    m.position.set(x, -0.6, -40);
+    // Cars point +Z; we want them facing camera. Rotate 180 so they "come at" you.
+    m.rotation.y = Math.PI;
+
+    // scale to lane
+    m.scale.setScalar(useTruck ? 1.2 : 1.0);
+
     scene.add(m);
     obstacles.push({ mesh: m, passed: false });
   }
@@ -159,7 +209,9 @@
 
   function reset(){
     // clear obstacles
-    for(const o of obstacles){ scene.remove(o.mesh); o.mesh.geometry.dispose?.(); }
+    for(const o of obstacles){
+      scene.remove(o.mesh);
+    }
     obstacles.length = 0;
 
     score = 0;
@@ -296,6 +348,43 @@
     requestAnimationFrame(loop);
   }
 
+  async function initAssets(){
+    try{
+      // local relative URLs (served from this folder)
+      const [ch, car, truck] = await Promise.all([
+        loadGLB('./assets/models/character.glb'),
+        loadGLB('./assets/models/car.glb'),
+        loadGLB('./assets/models/truck.glb'),
+      ]);
+
+      // Character
+      assets.character = ch;
+      // Normalize character scale/position
+      ch.scale.setScalar(1.2);
+      ch.position.set(0, -1.05, 0);
+      player.add(ch);
+
+      // Car/truck
+      assets.car = car;
+      assets.truck = truck;
+
+      // Some Kenney glbs come with their own transforms/materials; keep as-is.
+    } catch(e){
+      console.error('Asset load failed:', e);
+      // Fall back to primitives
+      const fallbackPlayer = new THREE.Mesh(
+        new THREE.SphereGeometry(0.6, 24, 24),
+        new THREE.MeshStandardMaterial({ color: 0xe8eeff, roughness: 0.35, metalness: 0.1 })
+      );
+      fallbackPlayer.position.set(0, 0.0, 0);
+      player.add(fallbackPlayer);
+    } finally {
+      const el = document.getElementById('loading');
+      if(el) el.remove();
+    }
+  }
+
+  await initAssets();
   reset();
   requestAnimationFrame(loop);
 </script>
