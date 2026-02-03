@@ -86,11 +86,19 @@
   let best = Number(localStorage.getItem(BEST_KEY) || 0);
   bestEl.textContent = String(best);
 
+  // Detect WebGL context loss (can happen on some Android devices)
+  canvas.addEventListener('webglcontextlost', (e)=>{
+    e.preventDefault();
+    showFatal('WebGL context was lost. Close other apps/tabs and reload.');
+  }, false);
+
   let renderer;
   try {
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+    // alpha=false so we can clearly see if the renderer is drawing (solid clear color).
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.setClearColor(0x0b1020, 1);
   } catch (e) {
     console.error(e);
     showFatal('This device cannot start WebGL: ' + String(e));
