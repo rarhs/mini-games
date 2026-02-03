@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>Low‑Poly Racer (Three.js)</title>
+  <link rel="stylesheet" href="../_shared.css"/>
+  <style>
+    #c{display:block;width:100%;height:100%}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title"><b>Low‑Poly Racer</b><span>Three.js. High speed. Drift the curve.</span></div>
+    <div class="hud">
+      <div class="chip"><small>Speed</small><b id="speed">0</b></div>
+      <div class="chip"><small>Dist</small><b id="dist">0</b></div>
+      <div class="chip"><small>Best</small><b id="best">0</b></div>
+      <button id="btnRestart">Restart</button>
+      <a class="chip" href="../.."><small>Back</small><b>Home</b></a>
+    </div>
+  </header>
+
+  <canvas id="c"></canvas>
+
+  <footer>
+    <div>Controls: drag / A-D / ← → • R restart</div>
+    <div>Tip: stay near the center line in tight curves.</div>
+  </footer>
+</div>
+
+<script type="module">
+  import * as THREE from './assets/js/three.module.js';
+
+  const canvas = document.getElementById('c');
+  const speedEl = document.getElementById('speed');
+  const distEl = document.getElementById('dist');
+  const bestEl = document.getElementById('best');
+  const btnRestart = document.getElementById('btnRestart');
+
+  const BEST_KEY = 'mini_lowpoly_racer_best_v1';
+  let best = Number(localStorage.getItem(BEST_KEY) || 0);
+  bestEl.textContent = String(best);
+
+  function showFatal(msg){
+    const div = document.createElement('div');
+    div.style.position='absolute';
+    div.style.left='0';
+    div.style.right='0';
+    div.style.top='0';
+    div.style.bottom='0';
+    div.style.display='grid';
+    div.style.placeItems='center';
+    div.style.background='rgba(0,0,0,0.45)';
+    div.style.color='#e8eeff';
+    div.style.fontFamily='ui-sans-serif,system-ui';
+    div.style.zIndex='999';
+    div.innerHTML = `
+      <div style="text-align:center; padding:18px 16px; max-width:560px;">
+        <div style="font-weight:900; font-size:28px;">WEBGL ERROR</div>
+        <div style="opacity:.9; margin-top:10px; font-weight:600; line-height:1.4;">${msg}</div>
+        <div style="opacity:.8; margin-top:12px; font-size:13px;">Chrome: Settings → System → enable Hardware Acceleration.</div>
+      </div>
+    `;
+    document.body.appendChild(div);
+  }
+
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+  } catch (e) {
+    console.error(e);
+    showFatal('This device cannot start WebGL.');
+    throw e;
+  }
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x0b1020, 12, 120);
+
+  const camera = new THREE.PerspectiveCamera(60, 16/9, 0.1, 400);
+  camera.position.set(0, 7.5, 14);
+
+  // lights
+  scene.add(new THREE.HemisphereLight(0xe8eeff, 0x0b1020, 0.9));
+  const sun = new THREE.DirectionalLight(0x6aa7ff, 0.9);
+  sun.position.set(8, 12, 6);
+  scene.add(sun);
+
+  // world
+  const world = new THREE.Group();
+  scene.add(world);
+
+  // road settings
+  const ROAD_W = 9.0;
+  const SEG_LEN = 8.0;
+  const SEG_COUNT = 26;
+
+  // materials
+  const matRoad = new THREE.MeshStandardMaterial({ color: 0x121a33, roughness: 1, metalness: 0 });
+  const matShoulder = new THREE.MeshStandardMaterial({ color: 0x1e2a52, roughness: 1 });
+  const matLine = new THREE.MeshStandardMaterial({ color: 0xe8eeff, roughness: 0.9, emissive: 0x111111 });
+  const matGrass = new THREE.MeshStandardMaterial({ color: 0x153a2a, roughness: 1 });
+
+  // build segments (recycled)
+  const segments = [];
+  const segGeo = new THREE.BoxGeometry(ROAD_W, 0.4, SEG_LEN);
+  const shoulderGeo = new THREE.BoxGeometry(2.0, 0.35, SEG_LEN);
+  const lineGeo = new THREE.BoxGeometry(0.15, 0.05, SEG_LEN*0.65);
+
+  function makeSegment(){
+    const g = new THREE.Group();
+
+    const road = new THREE.Mesh(segGeo, matRoad);
+    road.position.y = -1.1;
+    g.add(road);
+
+    const shL = new THREE.Mesh(shoulderGeo, matShoulder);
+    shL.position.set(-ROAD_W/2 - 1.0, -1.12, 0);
+    g.add(shL);
+
+    const shR = new THREE.Mesh(shoulderGeo, matShoulder);
+    shR.position.set(ROAD_W/2 + 1.0, -1.12, 0);
+    g.add(shR);
+
+    const line = new THREE.Mesh(lineGeo, matLine);
+    line.position.set(0, -0.88, 0);
+    g.add(line);
+
+    // grass slabs for parallax
+    const grass = new THREE.Mesh(new THREE.BoxGeometry(60, 0.2, SEG_LEN), matGrass);
+    grass.position.set(0, -1.35, 0);
+    g.add(grass);
+
+    g.userData = { curve: 0, worldX: 0 };
+    world.add(g);
+    return g;
+  }
+
+  for(let i=0;i<SEG_COUNT;i++) segments.push(makeSegment());
+
+  // obstacles (cones)
+  const obstacles = [];
+  const coneGeo = new THREE.ConeGeometry(0.45, 0.9, 6);
+  const coneMat = new THREE.MeshStandardMaterial({ color: 0xff4d6d, roughness: 0.6, emissive: 0x1a0006 });
+  function makeCone(){
+    const m = new THREE.Mesh(coneGeo, coneMat);
+    m.position.y = -0.65;
+    world.add(m);
+    return m;
+  }
+  for(let i=0;i<14;i++) obstacles.push({ mesh: makeCone(), active:false, z:0, x:0 });
+
+  // player car (procedural low-poly)
+  const car = new THREE.Group();
+  car.position.set(0, -0.6, 2.2);
+  world.add(car);
+
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(2.2, 0.55, 4.2),
+    new THREE.MeshStandardMaterial({ color: 0x32e875, roughness: 0.45, metalness: 0.05, emissive: 0x061e12 })
+  );
+  body.position.y = 0.35;
+  car.add(body);
+
+  const cabin = new THREE.Mesh(
+    new THREE.BoxGeometry(1.6, 0.6, 1.6),
+    new THREE.MeshStandardMaterial({ color: 0x6aa7ff, roughness: 0.35, metalness: 0.1, emissive: 0x0b1426 })
+  );
+  cabin.position.set(0, 0.75, -0.4);
+  car.add(cabin);
+
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0b1020, roughness: 1, metalness: 0 });
+  const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.35, 10);
+  function wheel(x,z){
+    const w = new THREE.Mesh(wheelGeo, wheelMat);
+    w.rotation.z = Math.PI/2;
+    w.position.set(x, 0.15, z);
+    car.add(w);
+    return w;
+  }
+  const w1 = wheel(-0.95, 1.4), w2 = wheel(0.95, 1.4), w3 = wheel(-0.95, -1.4), w4 = wheel(0.95, -1.4);
+
+  // camera target
+  const camTarget = new THREE.Vector3(0, -0.6, -12);
+
+  // input
+  let targetX = 0;
+  let dragging=false;
+  let lastX=0;
+  const keys = new Set();
+  window.addEventListener('keydown',(e)=>{
+    const k=e.key.toLowerCase();
+    if(['arrowleft','arrowright','a','d','r'].includes(k)) e.preventDefault();
+    keys.add(k);
+    if(k==='r') reset();
+  },{passive:false});
+  window.addEventListener('keyup',(e)=>keys.delete(e.key.toLowerCase()));
+
+  canvas.addEventListener('pointerdown',(e)=>{dragging=true; lastX=e.clientX; canvas.setPointerCapture?.(e.pointerId);});
+  canvas.addEventListener('pointerup',()=>dragging=false);
+  canvas.addEventListener('pointercancel',()=>dragging=false);
+  canvas.addEventListener('pointermove',(e)=>{
+    if(!dragging) return;
+    const dx=e.clientX-lastX; lastX=e.clientX;
+    targetX += dx*0.02;
+    targetX = THREE.MathUtils.clamp(targetX, -ROAD_W*0.45, ROAD_W*0.45);
+  });
+
+  btnRestart.onclick=reset;
+
+  function fit(){
+    const rect=canvas.getBoundingClientRect();
+    const w=Math.max(360, Math.floor(rect.width || (window.innerWidth-24)));
+    const h=Math.max(320, Math.floor(window.innerHeight*0.72));
+    renderer.setSize(w,h);
+    camera.aspect = w/h;
+    camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(fit).observe(canvas);
+  fit();
+
+  // game state
+  let speed=0;
+  let dist=0;
+  let worldZ=0;
+  let over=false;
+
+  // curve model
+  // We generate a smooth left/right curve value per segment.
+  let curvePhase = 0;
+
+  function reset(){
+    speed=0;
+    dist=0;
+    worldZ=0;
+    over=false;
+    targetX=0;
+    car.position.x=0;
+    curvePhase = Math.random()*10;
+
+    // reset segments positions
+    for(let i=0;i<segments.length;i++){
+      const seg=segments[i];
+      seg.position.z = -i*SEG_LEN;
+      seg.userData.curve = 0;
+      seg.userData.worldX = 0;
+      seg.position.x = 0;
+    }
+
+    for(const o of obstacles){ o.active=false; o.mesh.visible=false; }
+
+    speedEl.textContent='0';
+    distEl.textContent='0';
+  }
+
+  function setBest(){
+    if(dist>best){ best=dist; localStorage.setItem(BEST_KEY,String(best)); bestEl.textContent=String(best); }
+  }
+
+  function spawnObstacleAt(z, roadCenterX){
+    const slot = obstacles.find(o=>!o.active);
+    if(!slot) return;
+    slot.active=true;
+    slot.z=z;
+    // place cone somewhere on lane
+    const laneX = (Math.random()*2-1) * (ROAD_W*0.42);
+    slot.x = roadCenterX + laneX;
+    slot.mesh.position.set(slot.x, -0.65, slot.z);
+    slot.mesh.rotation.y = Math.random()*Math.PI;
+    slot.mesh.visible=true;
+  }
+
+  function collideCone(o){
+    // rough AABB distance
+    const dx = (car.position.x) - o.x;
+    const dz = (car.position.z) - o.z;
+    return (Math.abs(dx) < 0.9) && (Math.abs(dz) < 1.2);
+  }
+
+  let last=performance.now();
+  function loop(now){
+    const dt = Math.min(0.033, (now-last)/1000);
+    last=now;
+
+    // steering input
+    if(keys.has('arrowleft')||keys.has('a')) targetX -= 7.5*dt;
+    if(keys.has('arrowright')||keys.has('d')) targetX += 7.5*dt;
+    targetX = THREE.MathUtils.clamp(targetX, -ROAD_W*0.45, ROAD_W*0.45);
+
+    // accelerate
+    if(!over){
+      speed = THREE.MathUtils.clamp(speed + dt*28, 0, 210);
+      dist += speed*dt;
+      setBest();
+    } else {
+      speed = Math.max(0, speed - dt*120);
+    }
+
+    speedEl.textContent = String(Math.round(speed));
+    distEl.textContent = String(Math.floor(dist));
+
+    // move world
+    worldZ += speed*dt*0.15;
+
+    // car position follows target with drift
+    car.position.x = THREE.MathUtils.lerp(car.position.x, targetX, 0.12);
+
+    // wheel spin
+    const spin = speed*dt*0.08;
+    w1.rotation.x += spin; w2.rotation.x += spin; w3.rotation.x += spin; w4.rotation.x += spin;
+
+    // generate curve
+    curvePhase += dt * (0.35 + speed*0.001);
+
+    // update segments
+    // roadCenterX drifts based on curve; we accumulate and set segment x.
+    let roadCenterX = 0;
+    for(let i=0;i<segments.length;i++){
+      const seg = segments[i];
+      // recycle
+      if(seg.position.z - worldZ > SEG_LEN){
+        // move segment further ahead
+        seg.position.z -= SEG_LEN*segments.length;
+
+        // assign new curve sample for this segment
+        const c = Math.sin(curvePhase + (seg.position.z*0.03)) * 0.75 + Math.sin(curvePhase*0.37 + (seg.position.z*0.018))*0.35;
+        seg.userData.curve = THREE.MathUtils.clamp(c, -1.0, 1.0);
+
+        // random obstacle chance
+        if(Math.random() < 0.42 && speed > 60){
+          spawnObstacleAt(seg.position.z - worldZ - SEG_LEN*0.35, roadCenterX);
+        }
+      }
+
+      // compute this seg center
+      roadCenterX += seg.userData.curve * 0.32;
+      seg.userData.worldX = roadCenterX;
+
+      // place segment relative to camera
+      seg.position.x = roadCenterX;
+      seg.position.z = seg.position.z + worldZ;
+    }
+
+    // update obstacles with worldZ
+    for(const o of obstacles){
+      if(!o.active) continue;
+      o.mesh.position.z = o.z + worldZ;
+      o.mesh.position.x = o.x;
+      o.mesh.rotation.y += dt*0.6;
+      if(o.mesh.position.z > 12){
+        o.active=false;
+        o.mesh.visible=false;
+      }
+    }
+
+    // camera follow
+    camera.position.x = THREE.MathUtils.lerp(camera.position.x, car.position.x*0.35, 0.05);
+    camera.position.y = THREE.MathUtils.lerp(camera.position.y, 7.5, 0.03);
+    camera.position.z = THREE.MathUtils.lerp(camera.position.z, 14, 0.03);
+    camTarget.set(car.position.x*0.2, -0.6, -12);
+    camera.lookAt(camTarget);
+
+    // crash if off road or hit cone
+    if(!over){
+      const roadEdge = (ROAD_W/2 - 0.9);
+      if(Math.abs(car.position.x) > roadEdge) over = true;
+      for(const o of obstacles){
+        if(o.active && collideCone(o)) { over = true; break; }
+      }
+    }
+
+    // overlay
+    if(over){
+      if(!document.getElementById('over')){
+        const div=document.createElement('div');
+        div.id='over';
+        div.style.position='absolute';
+        div.style.left='0';
+        div.style.right='0';
+        div.style.top='0';
+        div.style.bottom='0';
+        div.style.display='grid';
+        div.style.placeItems='center';
+        div.style.background='rgba(0,0,0,0.35)';
+        div.style.backdropFilter='blur(2px)';
+        div.style.color='#e8eeff';
+        div.style.fontFamily='ui-sans-serif,system-ui';
+        div.style.zIndex='10';
+        div.innerHTML = `
+          <div style="text-align:center; padding:18px 16px; max-width:520px;">
+            <div style="font-weight:900; font-size:44px; letter-spacing:1px;">CRASHED</div>
+            <div style="opacity:.9; margin-top:10px; font-weight:700;">Distance: ${Math.floor(dist)} • Best: ${best}</div>
+            <div style="opacity:.8; margin-top:14px; font-weight:600;">Tap Restart or press R</div>
+          </div>
+        `;
+        document.body.appendChild(div);
+      }
+    } else {
+      const div=document.getElementById('over');
+      if(div) div.remove();
+    }
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  }
+
+  reset();
+  requestAnimationFrame(loop);
+</script>
+</body>
+</html>
