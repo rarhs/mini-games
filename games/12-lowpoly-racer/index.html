@@ -154,7 +154,7 @@
     grass.position.set(0, -1.35, 0);
     g.add(grass);
 
-    g.userData = { curve: 0, worldX: 0 };
+    g.userData = { curve: 0, worldX: 0, z0: 0 };
     world.add(g);
     return g;
   }
@@ -261,13 +261,14 @@
     car.position.x=0;
     curvePhase = Math.random()*10;
 
-    // reset segments positions
+    // reset segments positions (use logical z0; render z = z0 + worldZ)
     for(let i=0;i<segments.length;i++){
       const seg=segments[i];
-      seg.position.z = -i*SEG_LEN;
+      seg.userData.z0 = -i*SEG_LEN;
       seg.userData.curve = 0;
       seg.userData.worldX = 0;
       seg.position.x = 0;
+      seg.position.z = seg.userData.z0;
     }
 
     for(const o of obstacles){ o.active=false; o.mesh.visible=false; }
@@ -340,18 +341,22 @@
     let roadCenterX = 0;
     for(let i=0;i<segments.length;i++){
       const seg = segments[i];
-      // recycle
-      if(seg.position.z - worldZ > SEG_LEN){
-        // move segment further ahead
-        seg.position.z -= SEG_LEN*segments.length;
 
-        // assign new curve sample for this segment
-        const c = Math.sin(curvePhase + (seg.position.z*0.03)) * 0.75 + Math.sin(curvePhase*0.37 + (seg.position.z*0.018))*0.35;
+      // render z for this segment
+      const rz = seg.userData.z0 + worldZ;
+
+      // recycle when it passes the camera
+      if(rz > SEG_LEN){
+        seg.userData.z0 -= SEG_LEN*segments.length;
+
+        // assign new curve sample for this segment (use logical z0 to keep numbers stable)
+        const zRef = seg.userData.z0;
+        const c = Math.sin(curvePhase + (zRef*0.03)) * 0.75 + Math.sin(curvePhase*0.37 + (zRef*0.018))*0.35;
         seg.userData.curve = THREE.MathUtils.clamp(c, -1.0, 1.0);
 
-        // random obstacle chance
+        // random obstacle chance (store logical z)
         if(Math.random() < 0.42 && speed > 60){
-          spawnObstacleAt(seg.position.z - worldZ - SEG_LEN*0.35, roadCenterX);
+          spawnObstacleAt(seg.userData.z0 - SEG_LEN*0.35, roadCenterX);
         }
       }
 
@@ -359,9 +364,9 @@
       roadCenterX += seg.userData.curve * 0.32;
       seg.userData.worldX = roadCenterX;
 
-      // place segment relative to camera
+      // place segment
       seg.position.x = roadCenterX;
-      seg.position.z = seg.position.z + worldZ;
+      seg.position.z = seg.userData.z0 + worldZ;
     }
 
     // update obstacles with worldZ
