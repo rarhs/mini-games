@@ -43,6 +43,15 @@
   let best = Number(localStorage.getItem(BEST_KEY) || 0);
   bestEl.textContent = String(best);
 
+  // Capture runtime errors and show them on-screen (debug-friendly)
+  window.__errs = [];
+  window.addEventListener('error', (e)=>{
+    window.__errs.push(String(e.message || e.error || e));
+  });
+  window.addEventListener('unhandledrejection', (e)=>{
+    window.__errs.push('unhandledrejection: ' + String(e.reason));
+  });
+
   function showFatal(msg){
     const div = document.createElement('div');
     div.style.position='absolute';
@@ -57,10 +66,10 @@
     div.style.fontFamily='ui-sans-serif,system-ui';
     div.style.zIndex='999';
     div.innerHTML = `
-      <div style="text-align:center; padding:18px 16px; max-width:560px;">
-        <div style="font-weight:900; font-size:28px;">WEBGL ERROR</div>
+      <div style="text-align:center; padding:18px 16px; max-width:640px;">
+        <div style="font-weight:900; font-size:28px;">CANVAS / WEBGL ERROR</div>
         <div style="opacity:.9; margin-top:10px; font-weight:600; line-height:1.4;">${msg}</div>
-        <div style="opacity:.8; margin-top:12px; font-size:13px;">Chrome: Settings → System → enable Hardware Acceleration.</div>
+        <div style="opacity:.8; margin-top:12px; font-size:13px;">If blank: open DevTools Console (desktop) or send a screenshot.</div>
       </div>
     `;
     document.body.appendChild(div);
@@ -73,7 +82,7 @@
     renderer.outputColorSpace = THREE.SRGBColorSpace;
   } catch (e) {
     console.error(e);
-    showFatal('This device cannot start WebGL.');
+    showFatal('This device cannot start WebGL: ' + String(e));
     throw e;
   }
 
