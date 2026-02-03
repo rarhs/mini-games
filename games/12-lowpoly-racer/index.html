@@ -38,6 +38,26 @@
 <script type="module">
   const canvas = document.getElementById('c');
 
+  // Visual sanity: if you can see RED, the canvas is on screen.
+  canvas.style.background = '#400';
+
+  // Minimal on-screen debug (dimensions)
+  const dbg = document.createElement('div');
+  dbg.id = 'dbg';
+  dbg.style.position = 'absolute';
+  dbg.style.left = '16px';
+  dbg.style.bottom = '16px';
+  dbg.style.padding = '8px 10px';
+  dbg.style.border = '1px solid rgba(255,255,255,0.12)';
+  dbg.style.borderRadius = '10px';
+  dbg.style.background = 'rgba(0,0,0,0.35)';
+  dbg.style.color = '#e8eeff';
+  dbg.style.font = '600 12px ui-sans-serif,system-ui';
+  dbg.style.zIndex = '999';
+  dbg.style.pointerEvents = 'none';
+  document.body.appendChild(dbg);
+
+
   // Capture runtime + module load errors
   window.__errs = window.__errs || [];
   window.addEventListener('error', (e)=>{ window.__errs.push(String(e.message || e.error || e)); });
@@ -241,9 +261,17 @@
 
   function fit(){
     const rect=canvas.getBoundingClientRect();
-    const w=Math.max(360, Math.floor(rect.width || (window.innerWidth-24)));
+    const w=Math.max(320, Math.floor(rect.width || (window.innerWidth-24)));
     const h=Math.max(320, Math.floor(window.innerHeight*0.72));
-    renderer.setSize(w,h);
+
+    // Keep CSS size stable
+    canvas.style.width = '100%';
+    canvas.style.height = h + 'px';
+
+    // Set buffer size (don't let setSize change style)
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    renderer.setSize(w,h,false);
+
     camera.aspect = w/h;
     camera.updateProjectionMatrix();
   }
@@ -330,6 +358,12 @@
 
     speedEl.textContent = String(Math.round(speed));
     distEl.textContent = String(Math.floor(dist));
+
+    const d = document.getElementById('dbg');
+    if(d){
+      const r = canvas.getBoundingClientRect();
+      d.textContent = `canvas css ${Math.round(r.width)}x${Math.round(r.height)} | buffer ${canvas.width}x${canvas.height} | dpr ${Math.min(2, window.devicePixelRatio||1)}`;
+    }
 
     // move world
     worldZ += speed*dt*0.15;
