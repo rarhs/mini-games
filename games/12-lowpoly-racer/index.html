@@ -68,7 +68,8 @@
 
   let THREE;
   try {
-    ({ default: undefined, ...THREE } = await import('./assets/js/three.module.js'));
+    // Import as a module namespace object.
+    THREE = await import('./assets/js/three.module.js');
   } catch (e) {
     console.error(e);
     showFatal('Failed to load Three.js module.\n\n' + String(e));
